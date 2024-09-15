@@ -1,15 +1,16 @@
+from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 import os
 import base64
-from requests import post, get
 import json
+from requests import post, get
+
+app = Flask(__name__)
 
 load_dotenv()
 
 client_id = os.getenv("CLIENT_ID")
-client_secret  = os.getenv("CLIENT_SECRET")
-
-## get access to authorization token
+client_secret = os.getenv("CLIENT_SECRET")
 
 def get_token():
     auth_string = client_id + ':' + client_secret
@@ -18,18 +19,18 @@ def get_token():
 
     url = "https://accounts.spotify.com/api/token"
     headers = {
-        "Authorization" : "Basic " + auth_base64,
-        "Content-type" : "application/x-www-form-urlencoded"
+        "Authorization": "Basic " + auth_base64,
+        "Content-type": "application/x-www-form-urlencoded"
     }
 
-    data = {"grant_type" : "client_credentials"}
-    result = post(url, headers = headers, data =  data)
+    data = {"grant_type": "client_credentials"}
+    result = post(url, headers=headers, data=data)
     json_result = json.loads(result.content)
     token = json_result["access_token"]
     return token
 
 def get_auth_header(token):
-    return {"Authorization" : "Bearer " + token}
+    return {"Authorization": "Bearer " + token}
 
 def search_for_artist(token, artist_name):
     url = "https://api.spotify.com/v1/search"
@@ -38,9 +39,8 @@ def search_for_artist(token, artist_name):
 
     query_url = url + query
     result = get(query_url, headers=headers)
-    json_result = json.loads(result.content)["artists"]["items" ]
+    json_result = json.loads(result.content)["artists"]["items"]
     if len(json_result) == 0:
-        print("No artist matches search")
         return None
     return json_result[0]
 
@@ -53,19 +53,22 @@ def get_songs_by_artist(token, artist_id):
 
     return json_result
 
-token = get_token()
-artist_name = input("Enter the artist's name: ")
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        artist_name = request.form['artist_name']
+        token = get_token()
+        result = search_for_artist(token, artist_name)
+        
+        if result is not None:
+            artist_id = result["id"]
+            songs = get_songs_by_artist(token, artist_id)
+            return jsonify({'artist_name': artist_name, 'songs': songs})
+        else:
+            return jsonify({'error': "Artist not found."})
+    
+    return render_template('index.html')
 
-# get id from artist name
-result = search_for_artist(token, artist_name)
-if result is not None:
-    artist_id = result["id"]
-
-    # get top 10 tracks for artist
-    songs = get_songs_by_artist(token, artist_id)
-
-    # display songs
-    for idx, song in enumerate(songs):
-        print(f"{idx + 1}. {song['name']}")
-else:
-    print("Artist not found.")
+if __name__ == '__main__':
+    app.run(debug=True)
+    
